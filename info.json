@@ -1,0 +1,10 @@
+{
+	"name": "auto-build-and-deconstruct",
+	"title": "Lazy Builder",
+	"description": "Auto Build/Deconstruct/Upgrade, but as non-cheaty as possible.",
+	"version": "1.1.3",
+	"factorio_version": "2.0",
+	"author": "Morgott",
+	"contact": "forum",
+	"dependencies": []
+}

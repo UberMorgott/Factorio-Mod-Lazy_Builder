@@ -1,0 +1,159 @@
+---------------------------------------------------------------------------------------------------
+Version: 1.1.3
+Date: 2026-06-26
+  Changes:
+    - Removed unused dead code: the `insert_modules` helper function (its logic is already inlined in the construction path).
+---------------------------------------------------------------------------------------------------
+Version: 1.1.2
+Date: 2026-06-26
+  Bugfixes:
+    - Fixed crash ("Index out of inventory bounds") in process_module_slots when an item-request-proxy insert/removal plan referenced a module slot index outside the target entity's module inventory. Module slot indices are now bounds-checked against the inventory size before access, so out-of-range slots are skipped instead of crashing on_tick.
+    - Fixed crash ("Unknown item name") when upgrading modded entities whose placement item name differs from the entity name (e.g. Bob's Inserters). The refunded item for the old entity is now resolved via prototype.items_to_place_this instead of assuming the entity name equals the item name.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.1
+Date: 2026-06-03
+  Bugfixes:
+    - Fixed crash ("spill_item_stack: Expected 1 argument but 4 were given") when items had to be dropped on the ground (e.g. full inventory during construction/upgrade). Updated the spill_item_stack call to the Factorio 2.0 single-table argument signature.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.0
+Date: 2026-01-31
+  Bugfixes:
+    - Fixed electric poles not connecting copper wires after ghost revive. Now uses create_entity instead of revive for electric poles, so the engine handles wire connections automatically (vanilla tree-building algorithm, no wire spiderweb).
+    - Fixed old tile items being destroyed when constructing tile ghosts on top of existing tiles. Replaced tiles are now returned to player inventory (or dropped on ground if full).
+---------------------------------------------------------------------------------------------------
+Version: 1.0.9
+Date: 2026-01-18
+  Features:
+    - Added automatic module insertion when building ghosts with module requests.
+    - Added support for module upgrade requests (item-request-proxy) - modules marked for quality upgrade are now automatically replaced.
+    - Ghosts can now be built immediately while holding items in cursor (shift-build mode).
+  Changes:
+    - Refactored entity upgrade function to use native apply_upgrade() API method instead of manual create_entity.
+    - Removed non-existent parameter from revive() API call.
+    - Major performance optimization: scan() now uses filtered queries (to_be_deconstructed, to_be_upgraded, type filters) instead of iterating all entities. Filtering is done by C++ engine instead of Lua.
+    - Cached player settings lookup in scan() to avoid redundant API calls.
+    - Old modules are now returned to player inventory when replaced (instead of being destroyed).
+    - If inventory is full, replaced modules are dropped on the ground near the entity.
+    - Item check now includes both main inventory and cursor stack for ghost construction.
+    - Major code refactoring: extracted 12 reusable helper functions (get_quality_name, item_stack, give_item_to_player, has_item, get_item_count_with_cursor, remove_item_with_cursor, add_to_plan, save_inserter_held_items, restore_inserter_lost_items, insert_modules, build_slot_plan, process_module_slots).
+    - Code reorganized into logical sections with clear separators.
+  Locale:
+    - Fixed typos in Russian localization.
+    - Added localization for all Factorio-supported languages: German, French, Spanish, Portuguese (Brazil), Polish, Chinese (Simplified), Chinese (Traditional), Japanese, Korean, Italian, Dutch, Swedish, Finnish, Norwegian, Czech, Hungarian, Romanian, Ukrainian, Turkish.
+  Bugfixes:
+    - Fixed items being destroyed when downgrading inserters with larger hand capacity to smaller (e.g. green/stack to blue/fast). Items that don't fit in new inserter's hand are now returned to player inventory.
+    - Fixed instant deconstruction/construction/upgrade modes not processing all entities (was limited to 1 per tick due to optimization).
+    - Fixed potential crash when deconstructing tiles without hidden_tile property.
+    - Fixed module replacement not checking quality - could incorrectly replace modules with different quality.
+    - Fixed early loop exit in construct/upgrade functions when instant mode enabled.
+    - Fixed crash when deconstructing special entities from mods like PY or Flow Control (added entity.minable check and pcall protection).
+    - Fixed crash when constructing special entities where item name differs from entity name (e.g. Flow Control pipes).
+    - Fixed set_tiles() not raising events for other mods (added raise_event=true and player parameters).
+    - Fixed entity.destroy() not passing player parameter to event handlers.
+    - Fixed tiles marked for deconstruction not being processed (deconstructible-tile-proxy requires separate search by name, not caught by to_be_deconstructed filter).
+    - Fixed tile deconstruction using player.mine_tile() instead of manual set_tiles() - properly handles items and events.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.8
+Date: 2024-12-16
+  Features:
+    - Quality is now supported when reviving ghosts and upgrading objects.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.7
+Date: 2024-12-07
+  Bugfixes:
+    - Fixed tile destruction, tiles are now correctly placed in inventory.
+    - Fixed bugs related to undoing the last action.
+  Changes:
+    - Added event calls for all mod actions, so other mods can use it.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.6
+Date: 2024-12-05
+  Bugfixes:
+    - The changelog has been fixed. Now it is displayed in-game.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.5
+Date: 2024-12-05
+  Changes:
+    - Added a nil check to prevent errors when demolishing and placing blueprints on trees simultaneously.
+  Bugfixes:
+    - Resolved an issue where objects became nil during simultaneous demolition and placement.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.4
+Date: 2024-12-05
+  Changes:
+    - Updated the mod icon to a more immersive design.
+    - Revised and expanded the mod translation for clarity and accuracy.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.3
+Date: 2024-12-04
+  Changes:
+    - Enhanced overall performance of the mod. 
+  Features:
+    - Introduced a new function for removing tiles.
+  Bugfixes:
+    - Addressed potential compatibility issues with other mods.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.2
+Date: 2024-12-04
+  Changes:
+    - Renamed the mod for better clarity. 
+  Bugfixes:
+    - Fixed an issue causing items to drop to the ground after upgrades.
+    - Resolved conflicts with other mods that could cause issues.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.1
+Date: 2024-12-04
+  Bugfixes:
+    - Corrected the object upgrade method to ensure both logic and items are preserved during upgrades.
+---------------------------------------------------------------------------------------------------
+Version: 1.0.0
+Date: 2024-12-04
+  Changes:
+    - Rewrote the entire codebase from scratch, reducing system load by three times.
+  Features:
+    - Added new functionality for automatic upgrades.
+  Bugfixes:
+    - Fixed issues preventing certain objects from being placed correctly.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.7
+Date: 2024-11-15
+  Features:
+    - Enabled the keyboard shortcut CTRL+B by default to toggle auto-construction on and off.
+    - Added a setting to customize the radius for auto-construction and deconstruction (cheats).
+    - Implemented settings for instant construction and deconstruction (cheats).
+    - Added options to allow demolition of trees and rocks (cheats).
+---------------------------------------------------------------------------------------------------
+Version: 0.0.6
+Date: 2024-11-14
+  Changes:
+    - Changed the construction and demolition process to occur one object every four ticks instead of instantly.
+  Bugfixes:
+    - Fixed an error that caused crashes due to "Unknown entity name" when using objects from old game versions or mods.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.5
+Date: 2024-11-12
+  Bugfixes:
+    - Resolved an issue with infinite resource consumption when placing a ghost on non-deconstructible objects.
+    - Added checks to ensure objects can be deconstructed before placing a ghost, preventing resource loss.
+    - Refactored code structure to improve calculations and prevent item loss.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.4
+Date: 2024-11-11
+  Bugfixes:
+    - Fixed various crashes occurring on the map.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.3
+Date: 2024-11-11
+  Changes:
+    - Fixed issues with free building mechanics.
+    - Improved the speed of building and demolition actions.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.2
+Date: 2024-11-11
+  Bugfixes:
+    - Corrected issues with camera auto-building functionality.
+---------------------------------------------------------------------------------------------------
+Version: 0.0.1
+Date: 2024-11-11
+  Features:
+    - Initial release of the mod.
