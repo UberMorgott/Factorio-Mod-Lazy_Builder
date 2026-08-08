@@ -1,18 +1,16 @@
 -- ============================================================================
--- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+-- HELPERS
 -- ============================================================================
 
--- Получить название качества (или "normal" по умолчанию)
 local function get_quality_name(obj)
   return obj and obj.quality and obj.quality.name or "normal"
 end
 
--- Создать таблицу предмета с качеством
 local function item_stack(name, count, quality)
   return { name = name, count = count or 1, quality = quality or "normal" }
 end
 
--- Добавить предмет в инвентарь, излишки — на землю
+-- Insert into the inventory; whatever does not fit is spilled on the ground.
 local function give_item_to_player(player, inventory, name, count, quality, position)
   local stack = item_stack(name, count, quality)
   local inserted = inventory.insert(stack)
@@ -22,12 +20,10 @@ local function give_item_to_player(player, inventory, name, count, quality, posi
   return inserted
 end
 
--- Проверить наличие предмета в инвентаре
 local function has_item(inventory, name, quality)
   return inventory.get_item_count(item_stack(name, 1, quality)) > 0
 end
 
--- Подсчёт предметов с учётом курсора
 local function get_item_count_with_cursor(player, inventory, name, quality)
   local count = inventory.get_item_count(item_stack(name, 1, quality))
   local cursor = player.cursor_stack
@@ -39,7 +35,6 @@ local function get_item_count_with_cursor(player, inventory, name, quality)
   return count
 end
 
--- Удаление предмета с учётом курсора
 local function remove_item_with_cursor(player, inventory, name, quality, count)
   local removed = 0
   local in_inventory = inventory.get_item_count(item_stack(name, 1, quality))
@@ -68,7 +63,6 @@ local function remove_item_with_cursor(player, inventory, name, quality, count)
   return removed
 end
 
--- Добавить запись в план модулей
 local function add_to_plan(plan, name, quality, slot_index)
   for _, p in pairs(plan) do
     if p.id.name == name and (p.id.quality or "normal") == quality then
@@ -93,7 +87,6 @@ local function add_to_plan(plan, name, quality, slot_index)
   })
 end
 
--- Сохранить предметы из руки манипулятора
 local function save_inserter_held_items(entity)
   if entity.type ~= "inserter" then return nil end
   if not entity.held_stack or not entity.held_stack.valid_for_read then return nil end
@@ -105,7 +98,6 @@ local function save_inserter_held_items(entity)
   }
 end
 
--- Восстановить потерянные предметы манипулятора
 local function restore_inserter_lost_items(new_entity, held_items, player, inventory, position)
   if not held_items or new_entity.type ~= "inserter" then return end
 
@@ -118,7 +110,6 @@ local function restore_inserter_lost_items(new_entity, held_items, player, inven
   end
 end
 
--- Построить план действий по слотам
 local function build_slot_plan(insert_plan, removal_plan)
   local slots = {}
 
@@ -151,14 +142,14 @@ local function build_slot_plan(insert_plan, removal_plan)
   return slots
 end
 
--- Обработать слоты модулей (двухфазный подход: сначала удаления, потом вставки)
+-- Two-phase: all removals first, then the insertions.
 local function process_module_slots(slots, module_inventory, inventory, player, position)
   local did_something = false
   local new_insert_plan = {}
   local new_removal_plan = {}
   local slot_count = #module_inventory
 
-  -- Фаза 1: Удаления (включая удаления из операций замены)
+  -- Phase 1: removals (including the removal half of a replacement).
   for slot_index, data in pairs(slots) do
     local slot = (slot_index >= 1 and slot_index <= slot_count) and module_inventory[slot_index] or nil
     if not slot then goto continue_removal end
@@ -172,7 +163,6 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
         slot.clear()
         give_item_to_player(player, inventory, old_name, old_count, old_quality, position)
         did_something = true
-        -- Помечаем что удаление выполнено
         data.removal_done = true
       end
     end
@@ -180,7 +170,7 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
     ::continue_removal::
   end
 
-  -- Фаза 2: Вставки
+  -- Phase 2: insertions.
   for slot_index, data in pairs(slots) do
     local slot = (slot_index >= 1 and slot_index <= slot_count) and module_inventory[slot_index] or nil
     if not slot then goto continue_insert end
@@ -189,22 +179,20 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
     local old_name, old_quality = data.old_name, data.old_quality
 
     if new_name then
-      -- Для замены: вставляем только если удаление было выполнено или слот уже пустой
+      -- On a replacement, insert only if the removal actually happened -
+      -- otherwise the slot still holds a different module.
       local can_insert = true
       if old_name and not data.removal_done then
-        -- Удаление не было выполнено — слот занят не тем модулем, пропускаем
         can_insert = false
       end
 
       if can_insert and has_item(inventory, new_name, new_quality) then
-        -- Пробуем вставить в конкретный слот или в любой свободный
+        -- Target the exact slot when it is free, otherwise take any free one.
         local inserted = 0
         if not slot.valid_for_read then
-          -- Слот пустой — вставляем напрямую
           slot.set_stack(item_stack(new_name, 1, new_quality))
           inserted = 1
         else
-          -- Слот занят — пробуем вставить в инвентарь модулей
           inserted = module_inventory.insert(item_stack(new_name, 1, new_quality))
         end
 
@@ -215,13 +203,12 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
           add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
         end
       elseif new_name and not can_insert then
-        -- Не можем вставить — добавляем в план на потом
         add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
         if old_name then
           add_to_plan(new_removal_plan, old_name, old_quality, slot_index)
         end
       elseif new_name then
-        -- Нет предмета в инвентаре
+        -- Item not in the inventory: keep it in the plan for later.
         add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
       end
     end
@@ -233,17 +220,15 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
 end
 
 -- ============================================================================
--- УПРАВЛЕНИЕ АВТОБИЛДОМ
+-- AUTO-BUILD TOGGLE
 -- ============================================================================
 
--- Включение или отключение функции автобилда
 local function toggle_auto_build(player_index)
   local player = game.players[player_index]
   local state = not player.is_shortcut_toggled("player-toggle-auto-shortcut")
   player.set_shortcut_toggled("player-toggle-auto-shortcut", state)
 end
 
--- Обработчики событий для включения/отключения автопостройки с помощью горячей клавиши
 script.on_event("player-toggle-auto-input", function(event)
   toggle_auto_build(event.player_index)
 end)
@@ -255,24 +240,23 @@ script.on_event(defines.events.on_lua_shortcut, function(event)
 end)
 
 -- ============================================================================
--- СНОС
+-- DECONSTRUCTION
 -- ============================================================================
 
 local function deconstruct(entity, player, player_settings)
   local deconstruct_stones_trees = player_settings["deconstruct-stones-trees"].value
 
-  -- Проверка валидности в начале
   if not (entity and entity.valid) then return false end
 
-  -- Снос плиток
+  -- Tile deconstruction
   if entity.name == "deconstructible-tile-proxy" then
     local surface = entity.surface
     local tile = surface.get_tile(entity.position.x, entity.position.y)
 
-    -- Используем mine_tile — он сам обрабатывает предметы и события
+    -- mine_tile handles the item transfer and the mining events by itself.
     local success = player.mine_tile(tile)
 
-    -- Уничтожаем прокси если mine_tile не сделал это автоматически
+    -- Destroy the proxy if mine_tile did not already remove it.
     if entity.valid then
       entity.destroy({ raise_destroy = true, player = player })
     end
@@ -280,7 +264,7 @@ local function deconstruct(entity, player, player_settings)
     return success
   end
 
-  -- Снос обычных объектов
+  -- Regular entity deconstruction
   local can_deconstruct = (entity.force == player.force)
   if deconstruct_stones_trees and entity.force == game.forces["neutral"] then
     can_deconstruct = true
@@ -294,10 +278,9 @@ local function deconstruct(entity, player, player_settings)
 end
 
 -- ============================================================================
--- СТРОИТЕЛЬСТВО
+-- CONSTRUCTION
 -- ============================================================================
 
--- Обновление прокси после частичной вставки
 local function update_proxy_after_partial_insert(proxy, target)
   if not (proxy and proxy.valid and target and target.valid) then return end
 
@@ -347,13 +330,13 @@ local function update_proxy_after_partial_insert(proxy, target)
   end
 end
 
--- Проверка, не стоит ли кто-то в габаритах призрака.
--- Иначе танк, проехавший сквозь стену, будет мгновенно замурован обратно.
--- Габариты берём объединением bounding_box призрака и collision_box его прототипа
--- (смещённого к позиции призрака): объединение может только перекрыть лишнее,
--- но никогда не окажется меньше реальной площади.
--- ponytail: spider-vehicle намеренно НЕ блокирует — паук ходит поверх зданий,
--- и блокировка по нему мешала бы обычной стройке, ничего не спасая.
+-- Refuse to revive a ghost while somebody stands inside its footprint,
+-- otherwise a tank that drove through a wall gets instantly walled back in.
+-- The footprint is the union of the ghost bounding_box and the prototype
+-- collision_box (offset to the ghost position): a union can only cover too
+-- much, never less than the real area.
+-- ponytail: spider-vehicle is deliberately NOT a blocker - spidertrons walk
+-- over buildings, so blocking on them would break normal building for nothing.
 local function is_footprint_blocked(entity)
   local box = entity.bounding_box
   local lt = box and (box.left_top or box[1])
@@ -391,7 +374,6 @@ local function is_footprint_blocked(entity)
 end
 
 local function construct(entity, player, inventory)
-  -- Проверка валидности
   if not (entity and entity.valid) then return false end
   if not entity.ghost_name then return false end
 
@@ -401,19 +383,19 @@ local function construct(entity, player, inventory)
   local quality = get_quality_name(entity)
   local is_tile = (entity.type == "tile-ghost")
 
-  -- Плитки никого не запирают, поэтому проверяем только призраки сущностей
+  -- Tiles cannot trap anybody, so only entity ghosts need the footprint check.
   if not is_tile and is_footprint_blocked(entity) then return false end
 
   for _, item_data in pairs(required_items) do
     local item_name = item_data.name
 
     if get_item_count_with_cursor(player, inventory, item_name, quality) > 0 then
-      -- Получаем данные из призрака до оживления
+      -- Read the ghost data before reviving destroys the ghost.
       local item_requests = (not is_tile) and entity.item_requests or nil
       local entity_position = entity.position
 
-      -- Для электрических столбов используем create_entity вместо revive,
-      -- чтобы движок автоматически подключил медные провода
+      -- Electric poles go through create_entity instead of revive, so that the
+      -- engine wires up the copper connections automatically.
       local collided_items, revived_entity
       if not is_tile and entity.ghost_type == "electric-pole" then
         local surface = entity.surface
@@ -430,17 +412,17 @@ local function construct(entity, player, inventory)
         entity.destroy()
         revived_entity = surface.create_entity(create_params)
       else
-        -- Оживляем сущность (raise_revive поднимет событие script_raised_revive)
+        -- raise_revive makes the engine fire script_raised_revive.
         collided_items, revived_entity = entity.revive { raise_revive = true }
       end
 
-      -- Для плиток revive возвращает nil вместо entity, но collided_items будет таблицей при успехе
+      -- For tiles revive returns no entity; a table in collided_items means success.
       local success = is_tile and (collided_items ~= nil) or (revived_entity and revived_entity.valid)
 
       if success then
         remove_item_with_cursor(player, inventory, item_name, quality, 1)
 
-        -- Возвращаем предметы старой плитки в инвентарь (при замене плитки)
+        -- Items of the tile that got replaced go back to the player.
         if collided_items then
           for _, collided in pairs(collided_items) do
             if collided.count and collided.count > 0 then
@@ -449,7 +431,6 @@ local function construct(entity, player, inventory)
           end
         end
 
-        -- Вставляем модули если есть запросы и слоты для модулей (только для entity-ghost)
         if item_requests and #item_requests > 0 and revived_entity and revived_entity.valid then
           local module_inventory = revived_entity.get_module_inventory()
           if module_inventory then
@@ -481,7 +462,7 @@ local function construct(entity, player, inventory)
 end
 
 -- ============================================================================
--- АПГРЕЙД
+-- UPGRADE
 -- ============================================================================
 
 local function upgrade(entity, player, inventory)
@@ -503,7 +484,6 @@ local function upgrade(entity, player, inventory)
       local old_item = old_place_items and old_place_items[1]
       local position = entity.position
 
-      -- Сохраняем предметы манипулятора
       local held_items = save_inserter_held_items(entity)
 
       local new_entity = entity.apply_upgrade()
@@ -514,7 +494,6 @@ local function upgrade(entity, player, inventory)
           give_item_to_player(player, inventory, old_item.name, old_item.count, old_quality, position)
         end
 
-        -- Восстанавливаем потерянные предметы манипулятора
         restore_inserter_lost_items(new_entity, held_items, player, inventory, position)
 
         return true
@@ -527,7 +506,7 @@ local function upgrade(entity, player, inventory)
 end
 
 -- ============================================================================
--- ОБРАБОТКА ЗАПРОСОВ НА МОДУЛИ
+-- MODULE REQUEST HANDLING
 -- ============================================================================
 
 local function fulfill_item_request(proxy, player, inventory)
@@ -546,15 +525,12 @@ local function fulfill_item_request(proxy, player, inventory)
     return false
   end
 
-  -- Собираем план действий по слотам
   local slots_to_process = build_slot_plan(insert_plan, removal_plan)
 
-  -- Обрабатываем слоты
   local did_something, new_insert_plan, new_removal_plan = process_module_slots(
     slots_to_process, module_inventory, inventory, player, target.position
   )
 
-  -- Обновляем или удаляем прокси только если что-то сделали
   if did_something and proxy.valid then
     if #new_insert_plan == 0 and #new_removal_plan == 0 then
       proxy.destroy()
@@ -568,7 +544,7 @@ local function fulfill_item_request(proxy, player, inventory)
 end
 
 -- ============================================================================
--- ОСНОВНОЙ ЦИКЛ СКАНИРОВАНИЯ
+-- MAIN SCAN LOOP
 -- ============================================================================
 
 local function scan(player)
@@ -591,18 +567,17 @@ local function scan(player)
   local instant_upgrade = player_settings["instant-upgrade"].value
   local nearest_first = player_settings["nearest-first"].value
 
-  -- Универсальная функция обработки сущностей
-  -- Возвращает true если нужно прервать scan (не-instant режим и что-то сделали)
+  -- Returns true when scan must stop (non-instant mode and something was done).
   local function process_all(filter_params, handler, instant)
     filter_params.position = position
     filter_params.radius = radius
 
     local entities = surface.find_entities_filtered(filter_params)
 
-    -- Ближние первыми: сортировка по квадрату расстояния, без sqrt.
-    -- Именно сортировка, а не разовый поиск минимума: нужно сохранить старое поведение
-    -- "действуем на первой сущности, которая сработала" — если ближайшая не удалась
-    -- (например, не хватило предметов), переходим к следующей по близости.
+    -- Nearest first: sort by squared distance, no sqrt needed.
+    -- A full sort rather than a single minimum lookup, to keep the old behaviour
+    -- of "act on the first entity that succeeds" - when the closest one fails
+    -- (not enough items, for example), fall through to the next closest.
     if nearest_first then
       local by_distance = {}
       for i, entity in pairs(entities) do
@@ -623,35 +598,35 @@ local function scan(player)
     return false
   end
 
-  -- 1. Снос
+  -- 1. Deconstruction
   if process_all(
     { to_be_deconstructed = true },
     function(e) return deconstruct(e, player, player_settings) end,
     instant_deconstruct
   ) then return true end
 
-  -- 2. Апгрейд
+  -- 2. Upgrades
   if process_all(
     { to_be_upgraded = true },
     function(e) return upgrade(e, player, inventory) end,
     instant_upgrade
   ) then return true end
 
-  -- 3. Призраки сущностей
+  -- 3. Entity ghosts
   if process_all(
     { type = "entity-ghost" },
     function(e) return construct(e, player, inventory) end,
     instant_construct
   ) then return true end
 
-  -- 4. Призраки плиток
+  -- 4. Tile ghosts
   if process_all(
     { type = "tile-ghost" },
     function(e) return construct(e, player, inventory) end,
     instant_construct
   ) then return true end
 
-  -- 5. Запросы на модули
+  -- 5. Module requests
   if process_all(
     { type = "item-request-proxy" },
     function(e) return fulfill_item_request(e, player, inventory) end,

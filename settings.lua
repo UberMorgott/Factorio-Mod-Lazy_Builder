@@ -10,7 +10,7 @@ data:extend({
       type = "int-setting",
       name = "custom-radius",
       setting_type = "runtime-per-user",
-      default_value = 10,  -- Например, начальное значение 10
+      default_value = 10,
       minimum_value = 1,
       maximum_value = 50,
       order = "b"
@@ -51,4 +51,3 @@ data:extend({
       order = "g"
     }
   })
-  
