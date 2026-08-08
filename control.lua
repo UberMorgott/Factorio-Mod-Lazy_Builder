@@ -347,6 +347,49 @@ local function update_proxy_after_partial_insert(proxy, target)
   end
 end
 
+-- Проверка, не стоит ли кто-то в габаритах призрака.
+-- Иначе танк, проехавший сквозь стену, будет мгновенно замурован обратно.
+-- Габариты берём объединением bounding_box призрака и collision_box его прототипа
+-- (смещённого к позиции призрака): объединение может только перекрыть лишнее,
+-- но никогда не окажется меньше реальной площади.
+-- ponytail: spider-vehicle намеренно НЕ блокирует — паук ходит поверх зданий,
+-- и блокировка по нему мешала бы обычной стройке, ничего не спасая.
+local function is_footprint_blocked(entity)
+  local box = entity.bounding_box
+  local lt = box and (box.left_top or box[1])
+  local rb = box and (box.right_bottom or box[2])
+
+  local left, top, right, bottom
+  if lt and rb then
+    left, top, right, bottom = lt.x, lt.y, rb.x, rb.y
+  end
+
+  local prototype = entity.ghost_prototype
+  local collision_box = prototype and prototype.collision_box
+  local position = entity.position
+  local clt = collision_box and (collision_box.left_top or collision_box[1])
+  local crb = collision_box and (collision_box.right_bottom or collision_box[2])
+
+  if clt and crb and position then
+    local x1, y1 = clt.x + position.x, clt.y + position.y
+    local x2, y2 = crb.x + position.x, crb.y + position.y
+    left   = left   and math.min(left, x1)   or x1
+    top    = top    and math.min(top, y1)    or y1
+    right  = right  and math.max(right, x2)  or x2
+    bottom = bottom and math.max(bottom, y2) or y2
+  end
+
+  if not left then return false end
+
+  local blockers = entity.surface.find_entities_filtered {
+    area = { { left, top }, { right, bottom } },
+    type = { "character", "car" },
+    limit = 1
+  }
+
+  return #blockers > 0
+end
+
 local function construct(entity, player, inventory)
   -- Проверка валидности
   if not (entity and entity.valid) then return false end
@@ -357,6 +400,9 @@ local function construct(entity, player, inventory)
 
   local quality = get_quality_name(entity)
   local is_tile = (entity.type == "tile-ghost")
+
+  -- Плитки никого не запирают, поэтому проверяем только призраки сущностей
+  if not is_tile and is_footprint_blocked(entity) then return false end
 
   for _, item_data in pairs(required_items) do
     local item_name = item_data.name
@@ -543,6 +589,7 @@ local function scan(player)
   local instant_deconstruct = player_settings["instant-deconstruction"].value
   local instant_construct = player_settings["instant-construction"].value
   local instant_upgrade = player_settings["instant-upgrade"].value
+  local nearest_first = player_settings["nearest-first"].value
 
   -- Универсальная функция обработки сущностей
   -- Возвращает true если нужно прервать scan (не-instant режим и что-то сделали)
@@ -551,6 +598,23 @@ local function scan(player)
     filter_params.radius = radius
 
     local entities = surface.find_entities_filtered(filter_params)
+
+    -- Ближние первыми: сортировка по квадрату расстояния, без sqrt.
+    -- Именно сортировка, а не разовый поиск минимума: нужно сохранить старое поведение
+    -- "действуем на первой сущности, которая сработала" — если ближайшая не удалась
+    -- (например, не хватило предметов), переходим к следующей по близости.
+    if nearest_first then
+      local by_distance = {}
+      for i, entity in pairs(entities) do
+        local entity_position = entity.position
+        local dx = entity_position.x - position.x
+        local dy = entity_position.y - position.y
+        by_distance[i] = { entity = entity, distance = dx * dx + dy * dy }
+      end
+      table.sort(by_distance, function(a, b) return a.distance < b.distance end)
+      for i, item in pairs(by_distance) do entities[i] = item.entity end
+    end
+
     for _, entity in pairs(entities) do
       if entity.valid and handler(entity) then
         if not instant then return true end

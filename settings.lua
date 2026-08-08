@@ -42,6 +42,13 @@ data:extend({
         setting_type = "runtime-per-user",
         default_value = false,
         order = "f"
-      }
+      },
+    {
+      type = "bool-setting",
+      name = "nearest-first",
+      setting_type = "runtime-per-user",
+      default_value = true,
+      order = "g"
+    }
   })
   
