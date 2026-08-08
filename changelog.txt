@@ -3,6 +3,8 @@ Version: 1.1.4
 Date: 2026-08-08
   Features:
     - Added "nearest-first" per-user setting (on by default): entities are now handled closest to the player first. Suggested by a forum user.
+  Changes:
+    - Removed unused dead code: the `update_proxy_after_partial_insert` helper function (it had no call sites anywhere in the mod).
   Bugfixes:
     - Entity ghosts are no longer revived while a character or a car-type vehicle that would collide with the finished entity stands inside their footprint, so a tank that drove through a wall is not instantly walled back in. Ghosts you can walk or drive over, such as transport belts and rails, are still built normally. Reported by a forum user.
 ---------------------------------------------------------------------------------------------------
