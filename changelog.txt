@@ -4,7 +4,7 @@ Date: 2026-08-08
   Features:
     - Added "nearest-first" per-user setting (on by default): entities are now handled closest to the player first. Suggested by a forum user.
   Bugfixes:
-    - Entity ghosts are no longer revived while a character or a car-type vehicle stands inside their footprint, so a tank that drove through a wall is not instantly walled back in. Reported by a forum user.
+    - Entity ghosts are no longer revived while a character or a car-type vehicle that would collide with the finished entity stands inside their footprint, so a tank that drove through a wall is not instantly walled back in. Ghosts you can walk or drive over, such as transport belts and rails, are still built normally. Reported by a forum user.
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.3
 Date: 2026-06-26
