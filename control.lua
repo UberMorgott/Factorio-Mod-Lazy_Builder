@@ -63,27 +63,20 @@ local function remove_item_with_cursor(player, inventory, name, quality, count)
   return removed
 end
 
-local function add_to_plan(plan, name, quality, slot_index)
+-- `stack_index` is 0-based, as in InventoryPosition.
+local function add_to_plan(plan, name, quality, inventory_id, stack_index, count)
+  local position = { inventory = inventory_id, stack = stack_index, count = count or 1 }
+
   for _, p in pairs(plan) do
     if p.id.name == name and (p.id.quality or "normal") == quality then
-      table.insert(p.items.in_inventory, {
-        inventory = defines.inventory.assembling_machine_modules,
-        stack = slot_index - 1,
-        count = 1
-      })
+      table.insert(p.items.in_inventory, position)
       return
     end
   end
 
   table.insert(plan, {
     id = { name = name, quality = quality },
-    items = {
-      in_inventory = {{
-        inventory = defines.inventory.assembling_machine_modules,
-        stack = slot_index - 1,
-        count = 1
-      }}
-    }
+    items = { in_inventory = { position } }
   })
 end
 
@@ -110,40 +103,40 @@ local function restore_inserter_lost_items(new_entity, held_items, player, inven
   end
 end
 
-local function build_slot_plan(insert_plan, removal_plan)
+-- Splits the proxy plans into module slots (handled here) and requests for
+-- other inventories (fuel, ammo, ...) which are passed back to the proxy
+-- untouched so the bots can still fulfill them.
+local function build_slot_plan(insert_plan, removal_plan, module_inventory_id)
   local slots = {}
+  local foreign_insert_plan = {}
+  local foreign_removal_plan = {}
 
-  if removal_plan then
-    for _, plan in pairs(removal_plan) do
+  local function collect(source, foreign, name_key, quality_key)
+    for _, plan in pairs(source or {}) do
       if plan.items and plan.items.in_inventory then
+        local quality = plan.id.quality or "normal"
         for _, inv_pos in pairs(plan.items.in_inventory) do
-          local idx = inv_pos.stack + 1
-          slots[idx] = slots[idx] or {}
-          slots[idx].old_name = plan.id.name
-          slots[idx].old_quality = plan.id.quality or "normal"
+          if inv_pos.inventory == module_inventory_id then
+            local idx = inv_pos.stack + 1
+            slots[idx] = slots[idx] or {}
+            slots[idx][name_key] = plan.id.name
+            slots[idx][quality_key] = quality
+          else
+            add_to_plan(foreign, plan.id.name, quality, inv_pos.inventory, inv_pos.stack, inv_pos.count)
+          end
         end
       end
     end
   end
 
-  if insert_plan then
-    for _, plan in pairs(insert_plan) do
-      if plan.items and plan.items.in_inventory then
-        for _, inv_pos in pairs(plan.items.in_inventory) do
-          local idx = inv_pos.stack + 1
-          slots[idx] = slots[idx] or {}
-          slots[idx].new_name = plan.id.name
-          slots[idx].new_quality = plan.id.quality or "normal"
-        end
-      end
-    end
-  end
+  collect(removal_plan, foreign_removal_plan, "old_name", "old_quality")
+  collect(insert_plan, foreign_insert_plan, "new_name", "new_quality")
 
-  return slots
+  return slots, foreign_insert_plan, foreign_removal_plan
 end
 
 -- Two-phase: all removals first, then the insertions.
-local function process_module_slots(slots, module_inventory, inventory, player, position)
+local function process_module_slots(slots, module_inventory, module_inventory_id, inventory, player, position)
   local did_something = false
   local new_insert_plan = {}
   local new_removal_plan = {}
@@ -190,8 +183,7 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
         -- Target the exact slot when it is free, otherwise take any free one.
         local inserted = 0
         if not slot.valid_for_read then
-          slot.set_stack(item_stack(new_name, 1, new_quality))
-          inserted = 1
+          inserted = slot.set_stack(item_stack(new_name, 1, new_quality)) and 1 or 0
         else
           inserted = module_inventory.insert(item_stack(new_name, 1, new_quality))
         end
@@ -200,16 +192,16 @@ local function process_module_slots(slots, module_inventory, inventory, player, 
           inventory.remove(item_stack(new_name, inserted, new_quality))
           did_something = true
         else
-          add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
+          add_to_plan(new_insert_plan, new_name, new_quality, module_inventory_id, slot_index - 1)
         end
       elseif new_name and not can_insert then
-        add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
+        add_to_plan(new_insert_plan, new_name, new_quality, module_inventory_id, slot_index - 1)
         if old_name then
-          add_to_plan(new_removal_plan, old_name, old_quality, slot_index)
+          add_to_plan(new_removal_plan, old_name, old_quality, module_inventory_id, slot_index - 1)
         end
       elseif new_name then
         -- Item not in the inventory: keep it in the plan for later.
-        add_to_plan(new_insert_plan, new_name, new_quality, slot_index)
+        add_to_plan(new_insert_plan, new_name, new_quality, module_inventory_id, slot_index - 1)
       end
     end
 
@@ -479,13 +471,19 @@ local function fulfill_item_request(proxy, player, inventory)
     return false
   end
 
-  local slots_to_process = build_slot_plan(insert_plan, removal_plan)
+  local module_inventory_id = module_inventory.index or defines.inventory.crafter_modules
+
+  local slots_to_process, foreign_insert_plan, foreign_removal_plan =
+    build_slot_plan(insert_plan, removal_plan, module_inventory_id)
 
   local did_something, new_insert_plan, new_removal_plan = process_module_slots(
-    slots_to_process, module_inventory, inventory, player, target.position
+    slots_to_process, module_inventory, module_inventory_id, inventory, player, target.position
   )
 
   if did_something and proxy.valid then
+    for _, p in pairs(foreign_insert_plan) do table.insert(new_insert_plan, p) end
+    for _, p in pairs(foreign_removal_plan) do table.insert(new_removal_plan, p) end
+
     if #new_insert_plan == 0 and #new_removal_plan == 0 then
       proxy.destroy()
     else
@@ -592,7 +590,13 @@ end
 
 script.on_event(defines.events.on_tick, function(event)
   for _, player in pairs(game.players) do
-    if player.connected and player.character and player.is_shortcut_toggled("player-toggle-auto-shortcut") and ((game.tick + player.index) % 4) == 0 then
+    -- controller_type check: in remote view player.surface/position follow the
+    -- camera while player.character stays set, so the mod would otherwise
+    -- build and mine at the camera with the body's inventory.
+    if player.connected and player.character
+      and player.controller_type == defines.controllers.character
+      and player.is_shortcut_toggled("player-toggle-auto-shortcut")
+      and ((game.tick + player.index) % 4) == 0 then
       scan(player)
     end
   end

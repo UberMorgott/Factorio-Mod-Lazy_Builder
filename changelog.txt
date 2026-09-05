@@ -1,4 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.5
+Date: 2026-09-05
+  Bugfixes:
+    - The mod no longer builds, mines or fulfills requests while the player is in remote view (map view). Previously it worked at the camera position using the character's inventory.
+    - Item request proxies that also request non-module items (e.g. fuel for a burner mining drill) keep those requests for the bots instead of them being treated as module slots and dropped.
+    - Module requests now use the real module inventory id of the target (beacon, lab, mining drill) instead of always the crafter module inventory.
+    - A module is no longer removed from the player's inventory when writing it into the target slot failed.
+  Changes:
+    - Removed the unused `toggled` field from the shortcut prototype (`toggleable` already handles it).
+---------------------------------------------------------------------------------------------------
 Version: 1.1.4
 Date: 2026-08-08
   Features:

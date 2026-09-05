@@ -7,7 +7,6 @@ data:extend(
     action = "lua",
     localised_name = {"shortcut.player-toggle-auto-shortcut"},
     toggleable = true,
-    toggled = true,
     icon = "__auto-build-and-deconstruct__/graphics/icons/abad_icon_32x24.png",
     icon_size = 32,
     small_icon  = "__auto-build-and-deconstruct__/graphics/icons/abad_icon_32x24.png",
