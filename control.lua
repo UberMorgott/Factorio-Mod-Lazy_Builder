@@ -315,6 +315,50 @@ local function deconstruct(entity, player, player_settings)
 end
 
 -- ============================================================================
+-- MODULE REQUEST HANDLING
+-- ============================================================================
+
+local function fulfill_item_request(proxy, player, inventory)
+  if not (proxy and proxy.valid) then return false end
+
+  local target = proxy.proxy_target
+  if not (target and target.valid) then return false end
+
+  local module_inventory = target.get_module_inventory and target.get_module_inventory()
+  if not module_inventory then return false end
+
+  local insert_plan = proxy.insert_plan
+  local removal_plan = proxy.removal_plan
+
+  if (not insert_plan or #insert_plan == 0) and (not removal_plan or #removal_plan == 0) then
+    return false
+  end
+
+  local module_inventory_id = module_inventory.index or defines.inventory.crafter_modules
+
+  local slots_to_process, foreign_insert_plan, foreign_removal_plan =
+    build_slot_plan(insert_plan, removal_plan, module_inventory_id)
+
+  local did_something, new_insert_plan, new_removal_plan = process_module_slots(
+    slots_to_process, module_inventory, module_inventory_id, inventory, player, target.position
+  )
+
+  if did_something and proxy.valid then
+    for _, p in pairs(foreign_insert_plan) do table.insert(new_insert_plan, p) end
+    for _, p in pairs(foreign_removal_plan) do table.insert(new_removal_plan, p) end
+
+    if #new_insert_plan == 0 and #new_removal_plan == 0 then
+      proxy.destroy()
+    else
+      proxy.insert_plan = new_insert_plan
+      proxy.removal_plan = new_removal_plan
+    end
+  end
+
+  return did_something
+end
+
+-- ============================================================================
 -- CONSTRUCTION
 -- ============================================================================
 
@@ -393,15 +437,15 @@ local function construct(entity, player, inventory)
       if not is_tile and is_footprint_blocked(entity) then return false end
 
       -- Read the ghost data before reviving destroys the ghost.
-      local item_requests = (not is_tile) and entity.item_requests or nil
       local entity_position = entity.position
+      local buffer = get_buffer()
 
       -- Electric poles without wires (e.g. Ctrl+Z undo ghosts) go through
       -- create_entity instead of revive, so that the engine wires up the copper
       -- connections automatically. Pole ghosts that already carry wires (from
       -- a blueprint paste) are revived normally: destroying the ghost would
       -- drop those wires, revive keeps them.
-      local collided_items, revived_entity
+      local collided_items, revived_entity, request_proxy
       if not is_tile and entity.ghost_type == "electric-pole" and not has_wires(entity) then
         local surface = entity.surface
         local create_params = {
@@ -417,8 +461,10 @@ local function construct(entity, player, inventory)
         entity.destroy()
         revived_entity = surface.create_entity(create_params)
       else
-        -- raise_revive makes the engine fire script_raised_revive.
-        collided_items, revived_entity = entity.revive { raise_revive = true }
+        -- raise_revive makes the engine fire script_raised_revive; items it
+        -- would delete go to `overflow`. The ghost's item requests (modules,
+        -- fuel, ...) come back as an item request proxy.
+        collided_items, revived_entity, request_proxy = entity.revive { raise_revive = true, overflow = buffer }
       end
 
       -- For tiles revive returns no entity; a table in collided_items means success.
@@ -427,38 +473,24 @@ local function construct(entity, player, inventory)
       if success then
         remove_item_with_cursor(player, inventory, item_name, quality, item_count)
 
-        -- Items of the tile that got replaced go back to the player.
-        if collided_items then
-          for _, collided in pairs(collided_items) do
-            if collided.count and collided.count > 0 then
-              give_item_to_player(player, inventory, collided.name, collided.count, collided.quality or "normal", entity_position)
-            end
+        -- Items the new entity or tile collided with go back to the player.
+        local expected = {}
+        for _, collided in pairs(collided_items or {}) do
+          if collided.count and collided.count > 0 then
+            table.insert(expected, { name = collided.name, count = collided.count, quality = collided.quality or "normal" })
           end
         end
+        settle_buffer(buffer, expected, player, inventory, entity_position)
 
-        if item_requests and #item_requests > 0 and revived_entity and revived_entity.valid then
-          local module_inventory = revived_entity.get_module_inventory()
-          if module_inventory then
-            for _, request in pairs(item_requests) do
-              local module_name = request.name
-              local module_quality = request.quality or "normal"
-              local module_count = request.count or 1
-
-              local available = inventory.get_item_count(item_stack(module_name, 1, module_quality))
-              local to_insert = math.min(available, module_count)
-
-              if to_insert > 0 then
-                local inserted = module_inventory.insert(item_stack(module_name, to_insert, module_quality))
-                if inserted > 0 then
-                  inventory.remove(item_stack(module_name, inserted, module_quality))
-                end
-              end
-            end
-          end
+        -- Fill the requested module slots right away; other requests stay
+        -- on the proxy for the bots.
+        if request_proxy and request_proxy.valid then
+          fulfill_item_request(request_proxy, player, inventory)
         end
 
         return true
       end
+      settle_buffer(buffer, {}, player, inventory, entity_position)
       return false
     end
   end
@@ -529,50 +561,6 @@ local function upgrade(entity, player, inventory)
   end
 
   return false
-end
-
--- ============================================================================
--- MODULE REQUEST HANDLING
--- ============================================================================
-
-local function fulfill_item_request(proxy, player, inventory)
-  if not (proxy and proxy.valid) then return false end
-
-  local target = proxy.proxy_target
-  if not (target and target.valid) then return false end
-
-  local module_inventory = target.get_module_inventory and target.get_module_inventory()
-  if not module_inventory then return false end
-
-  local insert_plan = proxy.insert_plan
-  local removal_plan = proxy.removal_plan
-
-  if (not insert_plan or #insert_plan == 0) and (not removal_plan or #removal_plan == 0) then
-    return false
-  end
-
-  local module_inventory_id = module_inventory.index or defines.inventory.crafter_modules
-
-  local slots_to_process, foreign_insert_plan, foreign_removal_plan =
-    build_slot_plan(insert_plan, removal_plan, module_inventory_id)
-
-  local did_something, new_insert_plan, new_removal_plan = process_module_slots(
-    slots_to_process, module_inventory, module_inventory_id, inventory, player, target.position
-  )
-
-  if did_something and proxy.valid then
-    for _, p in pairs(foreign_insert_plan) do table.insert(new_insert_plan, p) end
-    for _, p in pairs(foreign_removal_plan) do table.insert(new_removal_plan, p) end
-
-    if #new_insert_plan == 0 and #new_removal_plan == 0 then
-      proxy.destroy()
-    else
-      proxy.insert_plan = new_insert_plan
-      proxy.removal_plan = new_removal_plan
-    end
-  end
-
-  return did_something
 end
 
 -- ============================================================================
