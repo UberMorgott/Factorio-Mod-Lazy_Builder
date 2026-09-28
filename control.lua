@@ -293,8 +293,9 @@ local function deconstruct(entity, player, player_settings)
     -- mine_tile handles the item transfer and the mining events by itself.
     local success = player.mine_tile(tile)
 
-    -- Destroy the proxy if mine_tile did not already remove it.
-    if entity.valid then
+    -- Destroy the proxy if mine_tile did not already remove it. On failure
+    -- (e.g. full inventory) the order stays for a later pass or the bots.
+    if success and entity.valid then
       entity.destroy({ raise_destroy = true, player = player })
     end
 
