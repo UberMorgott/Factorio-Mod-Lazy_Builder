@@ -435,7 +435,7 @@ local function has_wires(entity)
   return false
 end
 
-local function construct(entity, player, inventory)
+local function construct(entity, player, inventory, counts)
   if not (entity and entity.valid) then return false end
   if not entity.ghost_name then return false end
 
@@ -450,7 +450,16 @@ local function construct(entity, player, inventory)
     -- ItemToPlace.count: e.g. a curved rail takes several rail items.
     local item_count = item_data.count or 1
 
-    if get_item_count_with_cursor(player, inventory, item_name, quality) >= item_count then
+    -- Counted once per scan pass: most ghosts in range usually wait for
+    -- items the player does not have.
+    local key = item_name .. "/" .. quality
+    local available = counts[key]
+    if not available then
+      available = get_item_count_with_cursor(player, inventory, item_name, quality)
+      counts[key] = available
+    end
+
+    if available >= item_count then
       -- Tiles cannot trap anybody, so only entity ghosts need the footprint
       -- check. It runs after the item count so it costs an area search only
       -- for ghosts that would really be built now, and still before any
@@ -618,6 +627,9 @@ local function scan(player)
   local force = player.force
   local deconstruct_forces = player_settings["deconstruct-stones-trees"].value and { force, "neutral" } or force
 
+  -- Item counts cached for construct(), keyed "name/quality".
+  local counts = {}
+
   -- Returns true when scan must stop (non-instant mode and something was done).
   local function process_all(filter_params, handler, instant)
     filter_params.position = position
@@ -643,6 +655,8 @@ local function scan(player)
 
     for _, entity in pairs(entities) do
       if entity.valid and handler(entity) then
+        -- Inventory changed: drop the cached item counts.
+        counts = {}
         if not instant then return true end
       end
     end
@@ -666,14 +680,14 @@ local function scan(player)
   -- 3. Entity ghosts
   if process_all(
     { type = "entity-ghost", force = force },
-    function(e) return construct(e, player, inventory) end,
+    function(e) return construct(e, player, inventory, counts) end,
     instant_construct
   ) then return true end
 
   -- 4. Tile ghosts
   if process_all(
     { type = "tile-ghost", force = force },
-    function(e) return construct(e, player, inventory) end,
+    function(e) return construct(e, player, inventory, counts) end,
     instant_construct
   ) then return true end
 
