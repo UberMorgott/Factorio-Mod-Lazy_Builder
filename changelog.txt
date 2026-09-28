@@ -1,4 +1,19 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.7
+Date: 2026-09-28
+  Bugfixes:
+    - Ghosts that need several items (e.g. curved rails) and upgrades now check for and take the full item count instead of one item.
+    - Upgrading an underground belt pair now charges and refunds both ends, not just one.
+    - Leftover items from upgrades and from reviving ghosts (e.g. collided items) are collected through the engine buffer and given to the player instead of being deleted or refunded twice.
+    - Module requests of a freshly built ghost are handled by the same slot-exact logic as other module requests; a module is no longer put into a different slot than requested.
+    - Pending module removals and equipment grid requests on an item request proxy are no longer dropped when other slots of it are processed.
+    - A tile deconstruction order is no longer removed when mining the tile failed (e.g. full inventory).
+    - An unwired electric pole ghost is no longer lost when creating the pole fails.
+    - The mod only builds, upgrades and deconstructs things of the player's own force (plus neutral trees and rocks when that setting is on).
+    - The shortcut's small icon is no longer cropped.
+  Optimizations:
+    - Item counts for ghosts are computed once per scan pass instead of once per ghost.
+---------------------------------------------------------------------------------------------------
 Version: 1.1.6
 Date: 2026-09-28
   Bugfixes:
