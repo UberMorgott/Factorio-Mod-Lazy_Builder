@@ -20,6 +20,49 @@ local function give_item_to_player(player, inventory, name, count, quality, posi
   return inserted
 end
 
+-- Script inventory handed to the engine as apply_upgrade `buffer` / revive
+-- `overflow`, so leftover items land there instead of being deleted.
+local function get_buffer()
+  local buffer = storage.buffer
+  if not (buffer and buffer.valid) then
+    buffer = game.create_inventory(100)
+    storage.buffer = buffer
+  end
+  return buffer
+end
+
+-- The docs do not say which items the engine puts into the buffer, so the
+-- player gets the whole buffer plus only the part of `expected` (items the
+-- mod has to refund) that is not already in it - never both.
+local function settle_buffer(buffer, expected, player, inventory, position)
+  local missing = {}
+  for _, e in pairs(expected) do
+    local key = e.name .. "/" .. e.quality
+    if not missing[key] then
+      missing[key] = { name = e.name, quality = e.quality, count = -buffer.get_item_count(item_stack(e.name, 1, e.quality)) }
+    end
+    missing[key].count = missing[key].count + e.count
+  end
+  for _, m in pairs(missing) do
+    if m.count > 0 then
+      give_item_to_player(player, inventory, m.name, m.count, m.quality, position)
+    end
+  end
+
+  for i = 1, #buffer do
+    local stack = buffer[i]
+    if stack.valid_for_read then
+      -- Inserting the LuaItemStack itself keeps item data (grids, labels, ...).
+      local inserted = inventory.insert(stack)
+      if inserted < stack.count then
+        stack.count = stack.count - inserted
+        player.surface.spill_item_stack({ position = position, stack = stack, enable_looted = true, force = player.force })
+      end
+    end
+  end
+  buffer.clear()
+end
+
 local function has_item(inventory, name, quality)
   return inventory.get_item_count(item_stack(name, 1, quality)) > 0
 end
@@ -91,16 +134,18 @@ local function save_inserter_held_items(entity)
   }
 end
 
-local function restore_inserter_lost_items(new_entity, held_items, player, inventory, position)
-  if not held_items or new_entity.type ~= "inserter" then return end
+-- Held items the upgraded inserter did not keep in its hand, or nil.
+local function inserter_lost_items(new_entity, held_items)
+  if not held_items or new_entity.type ~= "inserter" then return nil end
 
   local new_held = new_entity.held_stack
   local in_new_hand = (new_held and new_held.valid_for_read) and new_held.count or 0
   local lost = held_items.count - in_new_hand
 
   if lost > 0 then
-    give_item_to_player(player, inventory, held_items.name, lost, held_items.quality, position)
+    return { name = held_items.name, count = lost, quality = held_items.quality }
   end
+  return nil
 end
 
 -- Splits the proxy plans into module slots (handled here) and requests for
@@ -435,30 +480,50 @@ local function upgrade(entity, player, inventory)
   local required_items = upgrade_prototype.items_to_place_this
   if not required_items or #required_items == 0 then return false end
 
+  -- apply_upgrade also upgrades the paired underground belt end (its second
+  -- return value), so both ends have to be paid for.
+  local old_entities = { entity }
+  if entity.type == "underground-belt" then
+    local pair = entity.underground_belt_neighbour
+    if pair and pair.valid and pair.to_be_upgraded() then
+      table.insert(old_entities, pair)
+    end
+  end
+
   for _, item_data in pairs(required_items) do
     local item_name = item_data.name
     local item_count = item_data.count or 1
 
-    if inventory.get_item_count(item_stack(item_name, 1, new_quality)) >= item_count then
-      local old_quality = get_quality_name(entity)
-      local old_place_items = entity.prototype.items_to_place_this
-      local old_item = old_place_items and old_place_items[1]
+    if inventory.get_item_count(item_stack(item_name, 1, new_quality)) >= item_count * #old_entities then
+      -- Items the replaced entities give back.
+      local expected = {}
+      for _, old in pairs(old_entities) do
+        local old_place_items = old.prototype.items_to_place_this
+        local old_item = old_place_items and old_place_items[1]
+        if old_item then
+          table.insert(expected, { name = old_item.name, count = old_item.count, quality = get_quality_name(old) })
+        end
+      end
       local position = entity.position
 
       local held_items = save_inserter_held_items(entity)
 
-      local new_entity = entity.apply_upgrade()
+      local buffer = get_buffer()
+      local new_entity, new_pair = entity.apply_upgrade(nil, buffer)
 
       if new_entity and new_entity.valid then
-        inventory.remove(item_stack(item_name, item_count, new_quality))
-        if old_item then
-          give_item_to_player(player, inventory, old_item.name, old_item.count, old_quality, position)
-        end
+        local upgraded = (new_pair and new_pair.valid) and 2 or 1
+        inventory.remove(item_stack(item_name, item_count * upgraded, new_quality))
+        if upgraded < #old_entities then expected[2] = nil end
 
-        restore_inserter_lost_items(new_entity, held_items, player, inventory, position)
+        local lost = inserter_lost_items(new_entity, held_items)
+        if lost then table.insert(expected, lost) end
+
+        settle_buffer(buffer, expected, player, inventory, position)
 
         return true
       end
+      settle_buffer(buffer, {}, player, inventory, position)
       return false
     end
   end
