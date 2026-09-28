@@ -337,8 +337,10 @@ local function construct(entity, player, inventory)
 
   for _, item_data in pairs(required_items) do
     local item_name = item_data.name
+    -- ItemToPlace.count: e.g. a curved rail takes several rail items.
+    local item_count = item_data.count or 1
 
-    if get_item_count_with_cursor(player, inventory, item_name, quality) > 0 then
+    if get_item_count_with_cursor(player, inventory, item_name, quality) >= item_count then
       -- Tiles cannot trap anybody, so only entity ghosts need the footprint
       -- check. It runs after the item count so it costs an area search only
       -- for ghosts that would really be built now, and still before any
@@ -378,7 +380,7 @@ local function construct(entity, player, inventory)
       local success = is_tile and (collided_items ~= nil) or (revived_entity and revived_entity.valid)
 
       if success then
-        remove_item_with_cursor(player, inventory, item_name, quality, 1)
+        remove_item_with_cursor(player, inventory, item_name, quality, item_count)
 
         -- Items of the tile that got replaced go back to the player.
         if collided_items then
@@ -435,8 +437,9 @@ local function upgrade(entity, player, inventory)
 
   for _, item_data in pairs(required_items) do
     local item_name = item_data.name
+    local item_count = item_data.count or 1
 
-    if has_item(inventory, item_name, new_quality) then
+    if inventory.get_item_count(item_stack(item_name, 1, new_quality)) >= item_count then
       local old_quality = get_quality_name(entity)
       local old_place_items = entity.prototype.items_to_place_this
       local old_item = old_place_items and old_place_items[1]
@@ -447,7 +450,7 @@ local function upgrade(entity, player, inventory)
       local new_entity = entity.apply_upgrade()
 
       if new_entity and new_entity.valid then
-        inventory.remove(item_stack(item_name, 1, new_quality))
+        inventory.remove(item_stack(item_name, item_count, new_quality))
         if old_item then
           give_item_to_player(player, inventory, old_item.name, old_item.count, old_quality, position)
         end
