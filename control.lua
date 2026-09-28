@@ -316,6 +316,15 @@ local function is_footprint_blocked(entity)
   return false
 end
 
+-- True when any wire connector of the entity (or ghost) has a wire, ghost wires
+-- included.
+local function has_wires(entity)
+  for _, connector in pairs(entity.get_wire_connectors(false)) do
+    if connector.connection_count > 0 then return true end
+  end
+  return false
+end
+
 local function construct(entity, player, inventory)
   if not (entity and entity.valid) then return false end
   if not entity.ghost_name then return false end
@@ -340,10 +349,13 @@ local function construct(entity, player, inventory)
       local item_requests = (not is_tile) and entity.item_requests or nil
       local entity_position = entity.position
 
-      -- Electric poles go through create_entity instead of revive, so that the
-      -- engine wires up the copper connections automatically.
+      -- Electric poles without wires (e.g. Ctrl+Z undo ghosts) go through
+      -- create_entity instead of revive, so that the engine wires up the copper
+      -- connections automatically. Pole ghosts that already carry wires (from
+      -- a blueprint paste) are revived normally: destroying the ghost would
+      -- drop those wires, revive keeps them.
       local collided_items, revived_entity
-      if not is_tile and entity.ghost_type == "electric-pole" then
+      if not is_tile and entity.ghost_type == "electric-pole" and not has_wires(entity) then
         local surface = entity.surface
         local create_params = {
           name = entity.ghost_name,

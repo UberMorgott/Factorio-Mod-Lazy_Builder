@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.6
+Date: 2026-09-28
+  Bugfixes:
+    - Electric poles pasted from a blueprint (copy/paste) now keep their wires (copper, red and green). Pole ghosts that carry wires are revived normally; only ghosts without wires (e.g. after undo) are still rebuilt so the engine auto-connects them.
+---------------------------------------------------------------------------------------------------
 Version: 1.1.5
 Date: 2026-09-05
   Bugfixes:
