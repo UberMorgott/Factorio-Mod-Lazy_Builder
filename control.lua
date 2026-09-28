@@ -112,6 +112,7 @@ local function add_to_plan(plan, name, quality, inventory_id, stack_index, count
 
   for _, p in pairs(plan) do
     if p.id.name == name and (p.id.quality or "normal") == quality then
+      p.items.in_inventory = p.items.in_inventory or {}
       table.insert(p.items.in_inventory, position)
       return
     end
@@ -120,6 +121,21 @@ local function add_to_plan(plan, name, quality, inventory_id, stack_index, count
   table.insert(plan, {
     id = { name = name, quality = quality },
     items = { in_inventory = { position } }
+  })
+end
+
+-- Equipment grid request (ItemInventoryPositions.grid_count).
+local function add_grid_to_plan(plan, name, quality, grid_count)
+  for _, p in pairs(plan) do
+    if p.id.name == name and (p.id.quality or "normal") == quality then
+      p.items.grid_count = (p.items.grid_count or 0) + grid_count
+      return
+    end
+  end
+
+  table.insert(plan, {
+    id = { name = name, quality = quality },
+    items = { grid_count = grid_count }
   })
 end
 
@@ -158,8 +174,11 @@ local function build_slot_plan(insert_plan, removal_plan, module_inventory_id)
 
   local function collect(source, foreign, name_key, quality_key)
     for _, plan in pairs(source or {}) do
+      local quality = plan.id.quality or "normal"
+      if plan.items and plan.items.grid_count and plan.items.grid_count > 0 then
+        add_grid_to_plan(foreign, plan.id.name, quality, plan.items.grid_count)
+      end
       if plan.items and plan.items.in_inventory then
-        local quality = plan.id.quality or "normal"
         for _, inv_pos in pairs(plan.items.in_inventory) do
           if inv_pos.inventory == module_inventory_id then
             local idx = inv_pos.stack + 1
@@ -225,12 +244,10 @@ local function process_module_slots(slots, module_inventory, module_inventory_id
       end
 
       if can_insert and has_item(inventory, new_name, new_quality) then
-        -- Target the exact slot when it is free, otherwise take any free one.
+        -- Only the requested slot; while it is taken the request waits.
         local inserted = 0
         if not slot.valid_for_read then
           inserted = slot.set_stack(item_stack(new_name, 1, new_quality)) and 1 or 0
-        else
-          inserted = module_inventory.insert(item_stack(new_name, 1, new_quality))
         end
 
         if inserted > 0 then
@@ -248,6 +265,9 @@ local function process_module_slots(slots, module_inventory, module_inventory_id
         -- Item not in the inventory: keep it in the plan for later.
         add_to_plan(new_insert_plan, new_name, new_quality, module_inventory_id, slot_index - 1)
       end
+    elseif old_name and not data.removal_done then
+      -- Removal-only request not done yet: keep it for the engine / bots.
+      add_to_plan(new_removal_plan, old_name, old_quality, module_inventory_id, slot_index - 1)
     end
 
     ::continue_insert::
