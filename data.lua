@@ -10,7 +10,9 @@ data:extend(
     icon = "__auto-build-and-deconstruct__/graphics/icons/abad_icon_32x24.png",
     icon_size = 32,
     small_icon  = "__auto-build-and-deconstruct__/graphics/icons/abad_icon_32x24.png",
-    small_icon_size = 24
+    -- The PNG is a 32px icon plus its 16px mipmap (48x32), so the small icon
+    -- reuses it at 32px; 24 would crop the top-left 24x24.
+    small_icon_size = 32
   },
   {
     type = "custom-input",
