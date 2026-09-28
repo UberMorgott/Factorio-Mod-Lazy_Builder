@@ -458,8 +458,13 @@ local function construct(entity, player, inventory)
           raise_built = true,
           create_build_effect_smoke = false,
         }
-        entity.destroy()
+        -- Create first so a failed create_entity keeps the ghost. It normally
+        -- removes the colliding ghost itself (preserve_ghosts_and_corpses
+        -- defaults to false); destroy it here if it did not.
         revived_entity = surface.create_entity(create_params)
+        if revived_entity and entity.valid then
+          entity.destroy()
+        end
       else
         -- raise_revive makes the engine fire script_raised_revive; items it
         -- would delete go to `overflow`. The ghost's item requests (modules,
