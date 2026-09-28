@@ -613,6 +613,11 @@ local function scan(player)
   local instant_upgrade = player_settings["instant-upgrade"].value
   local nearest_first = player_settings["nearest-first"].value
 
+  -- Only the player's own force (shared by all co-op teammates), plus neutral
+  -- trees and rocks when that setting is on, like deconstruct() checks.
+  local force = player.force
+  local deconstruct_forces = player_settings["deconstruct-stones-trees"].value and { force, "neutral" } or force
+
   -- Returns true when scan must stop (non-instant mode and something was done).
   local function process_all(filter_params, handler, instant)
     filter_params.position = position
@@ -646,35 +651,35 @@ local function scan(player)
 
   -- 1. Deconstruction
   if process_all(
-    { to_be_deconstructed = true },
+    { to_be_deconstructed = true, force = deconstruct_forces },
     function(e) return deconstruct(e, player, player_settings) end,
     instant_deconstruct
   ) then return true end
 
   -- 2. Upgrades
   if process_all(
-    { to_be_upgraded = true },
+    { to_be_upgraded = true, force = force },
     function(e) return upgrade(e, player, inventory) end,
     instant_upgrade
   ) then return true end
 
   -- 3. Entity ghosts
   if process_all(
-    { type = "entity-ghost" },
+    { type = "entity-ghost", force = force },
     function(e) return construct(e, player, inventory) end,
     instant_construct
   ) then return true end
 
   -- 4. Tile ghosts
   if process_all(
-    { type = "tile-ghost" },
+    { type = "tile-ghost", force = force },
     function(e) return construct(e, player, inventory) end,
     instant_construct
   ) then return true end
 
   -- 5. Module requests
   if process_all(
-    { type = "item-request-proxy" },
+    { type = "item-request-proxy", force = force },
     function(e) return fulfill_item_request(e, player, inventory) end,
     instant_construct
   ) then return true end
