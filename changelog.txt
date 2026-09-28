@@ -1,33 +1,22 @@
 ---------------------------------------------------------------------------------------------------
-Version: 1.1.7
-Date: 2026-09-28
-  Bugfixes:
-    - Ghosts that need several items (e.g. curved rails) and upgrades now check for and take the full item count instead of one item.
-    - Upgrading an underground belt pair now charges and refunds both ends, not just one.
-    - Leftover items from upgrades and from reviving ghosts (e.g. collided items) are collected through the engine buffer and given to the player instead of being deleted or refunded twice.
-    - Module requests of a freshly built ghost are handled by the same slot-exact logic as other module requests; a module is no longer put into a different slot than requested.
-    - Pending module removals and equipment grid requests on an item request proxy are no longer dropped when other slots of it are processed.
-    - A tile deconstruction order is no longer removed when mining the tile failed (e.g. full inventory).
-    - An unwired electric pole ghost is no longer lost when creating the pole fails.
-    - The mod only builds, upgrades and deconstructs things of the player's own force (plus neutral trees and rocks when that setting is on).
-    - The shortcut's small icon is no longer cropped.
-  Optimizations:
-    - Item counts for ghosts are computed once per scan pass instead of once per ghost.
----------------------------------------------------------------------------------------------------
-Version: 1.1.6
-Date: 2026-09-28
-  Bugfixes:
-    - Electric poles pasted from a blueprint (copy/paste) now keep their wires (copper, red and green). Pole ghosts that carry wires are revived normally; only ghosts without wires (e.g. after undo) are still rebuilt so the engine auto-connects them.
----------------------------------------------------------------------------------------------------
 Version: 1.1.5
-Date: 2026-09-05
+Date: 28. 09. 2026
   Bugfixes:
     - The mod no longer builds, mines or fulfills requests while the player is in remote view (map view). Previously it worked at the camera position using the character's inventory.
-    - Item request proxies that also request non-module items (e.g. fuel for a burner mining drill) keep those requests for the bots instead of them being treated as module slots and dropped.
-    - Module requests now use the real module inventory id of the target (beacon, lab, mining drill) instead of always the crafter module inventory.
-    - A module is no longer removed from the player's inventory when writing it into the target slot failed.
-  Changes:
-    - Removed the unused `toggled` field from the shortcut prototype (`toggleable` already handles it).
+    - Electric poles pasted from a blueprint (copy/paste) now keep their wires (copper, red and green).
+    - An electric pole ghost left by undo is no longer lost when rebuilding the pole fails.
+    - Ghosts that need several items to build (e.g. curved and elevated rails) now check for and take the full item count instead of a single item. The same applies to upgrades.
+    - Upgrading an underground belt pair now charges and refunds both ends instead of duplicating items.
+    - Items left over from upgrades and from building ghosts, including items held by an upgraded inserter, are now returned to the player exactly once instead of being deleted or refunded twice.
+    - Item requests for buildings with several inventories are handled correctly: modules go into the right module inventory (beacons, labs, mining drills), and other requested items (e.g. fuel for a burner mining drill) are left for construction robots instead of being dropped.
+    - Modules are now placed into exactly the requested slots, and no extra modules are inserted.
+    - Pending module removal requests and equipment grid requests are no longer lost when other requested slots of the same building are processed.
+    - A module is no longer taken from the player's inventory when inserting it into the building failed.
+    - A tile deconstruction order is no longer lost when mining the tile fails (e.g. full inventory).
+    - Ghosts and entities of other forces are now ignored: the mod only builds, upgrades and deconstructs things of the player's own force (plus neutral trees and rocks when that setting is on).
+    - The shortcut's small icon is no longer cropped.
+  Optimizations:
+    - Item counts for ghosts are now computed once per scan instead of once per ghost.
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.4
 Date: 2026-08-08
@@ -126,7 +115,7 @@ Date: 2024-12-05
 Version: 1.0.3
 Date: 2024-12-04
   Changes:
-    - Enhanced overall performance of the mod. 
+    - Enhanced overall performance of the mod.
   Features:
     - Introduced a new function for removing tiles.
   Bugfixes:
@@ -135,7 +124,7 @@ Date: 2024-12-04
 Version: 1.0.2
 Date: 2024-12-04
   Changes:
-    - Renamed the mod for better clarity. 
+    - Renamed the mod for better clarity.
   Bugfixes:
     - Fixed an issue causing items to drop to the ground after upgrades.
     - Resolved conflicts with other mods that could cause issues.
