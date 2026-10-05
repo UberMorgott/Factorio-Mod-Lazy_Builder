@@ -551,7 +551,8 @@ local function upgrade(entity, player, inventory)
   -- return value), so both ends have to be paid for.
   local old_entities = { entity }
   if entity.type == "underground-belt" then
-    -- Factorio 2.1.7 replaced neighbours; unknown LuaEntity keys throw.
+    -- Factorio 2.1 has underground_belt_neighbour, 2.0 only neighbours;
+    -- reading an unknown LuaEntity key throws, hence the pcall.
     local has_pair_api, pair = pcall(function() return entity.underground_belt_neighbour end)
     if not has_pair_api then pair = entity.neighbours end
     if pair and pair.valid and pair.to_be_upgraded() then
