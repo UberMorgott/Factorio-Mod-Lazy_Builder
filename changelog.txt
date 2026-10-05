@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.6
+Date: 2026-10-05
+  Bugfixes:
+    - Fixed a crash when upgrading an underground belt (e.g. with Ctrl+U) on Factorio 2.0 ("LuaEntity doesn't contain key underground_belt_neighbour"). Reported on GitHub (issue #1).
+---------------------------------------------------------------------------------------------------
 Version: 1.1.5
 Date: 2026-09-28
   Bugfixes:
