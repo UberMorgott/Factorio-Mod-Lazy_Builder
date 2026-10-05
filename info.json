@@ -2,7 +2,7 @@
 	"name": "auto-build-and-deconstruct",
 	"title": "Lazy Builder",
 	"description": "Your character builds ghosts, deconstructs and upgrades marked things around you by itself, using items from your own inventory - no robots, no cheats. Toggle with Ctrl+B or the shortcut bar button; radius and instant modes are in Mod settings.",
-	"version": "1.1.6",
+	"version": "1.1.7",
 	"factorio_version": "2.0",
 	"author": "Morgott",
 	"contact": "forum",
